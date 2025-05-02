@@ -47,39 +47,44 @@ Essentially, SGP creates the missing link between centrally defined security gro
   - proxmoxer
   - requests
 
-### Development Environment Setup
-
-To set up a development environment:
-
-```bash
-# Install required system packages
-apt install python3-virtualenv python3-pip
-
-# Create and activate a virtual environment
-python3 -m virtualenv env
-source env/bin/activate
-
-# Install required Python packages
-pip install proxmoxer requests
-
-# For development
-pip install flake8
-```
-
 ## 🚀 Installation
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/filippolauria/sgp.git
-   cd sgp
-   ```
+Installation (tested on Debian 12):
 
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+# 1. Install git
+apt install git
 
-3. Configure the application (see Configuration section below)
+# 2. Clone the repository
+git clone https://github.com/filippolauria/sgp.git
+cd sgp
+
+# 3. Install dependencies
+pip install -r requirements.txt
+```
+
+4. Configure the application (see Configuration section below)
+
+## 💻 Development Environment Setup
+
+Execute the steps 1 and 2 from the Installation section above. Then:
+
+```bash
+# 1. Install development tools
+apt install python3-virtualenv python3-pip
+
+# 2. Create a virtual environment
+virtualenv env
+
+# 3. Activate the virtual environment
+source env/bin/activate
+
+# 4. Install development dependencies
+pip install flake8
+
+# 5. Install required dependencies
+pip install -r requirements.txt
+```
 
 ## ⚙️ Configuration
 
@@ -135,7 +140,6 @@ Create a `config.json` file with the following structure:
 ### Important Note
 
 The security groups referenced in the configuration (e.g., `web_firewall`, `basic_protection`, `db_firewall`) **must be created in advance** in the Proxmox VE firewall at the cluster level. SGP does not create the security groups themselves, but rather applies these pre-existing groups to VMs/CTs based on tag matching.
-```
 
 ### Configuration Options
 
@@ -224,3 +228,12 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [Proxmox VE Firewall](https://pve.proxmox.com/wiki/Firewall)
 - [Proxmox VE API](https://pve.proxmox.com/wiki/Proxmox_VE_API)
 - [Proxmox VE Tags](https://pve.proxmox.com/wiki/Tags)
+
+## 📝 TODO
+
+List of future enhancements for this project:
+
+- **Installation Script**: Create an automated installation script to simplify deployment
+- **SystemD Integration**: Implement SystemD service and timers instead of cron for more robust scheduling
+- **API Digest Handling**: Improve consistent usage of Proxmox API digests throughout the codebase
+- **Minimal Permissions**: Document exact minimal permissions required for the API token
