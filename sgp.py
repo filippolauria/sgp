@@ -243,11 +243,19 @@ class Proxmox:
             True if the group was added, False otherwise.
         """
         def add_operation(endpoint):
-            group = endpoint.get()
-            endpoint.post(action=group_name, enable=1, type='group', digest=group['digest'])
+            endpoint.post(action=group_name, enable=1, type='group')
             return True
 
-        return cls._retry_operation(f"adding group {group_name}", group_endpoint, add_operation)
+        def operation(endpoint):
+            try:
+                group_name = endpoint.get()['action']
+            except Exception:
+                group_name = "unknown"
+
+            return f"adding group {group_name}"
+
+        operation_name = operation(group_endpoint)
+        return cls._retry_operation(operation_name, group_endpoint, add_operation)
 
     @classmethod
     def move_group(cls, group_endpoint, position) -> bool:
@@ -263,10 +271,21 @@ class Proxmox:
         """
         def move_operation(endpoint):
             group = endpoint.get()
-            endpoint.put(moveto=position, digest=group['digest'])
-            return True
+            if group:
+                endpoint.put(moveto=position, digest=group['digest'])
+                return True
 
-        operation_name = f"moving group {group_endpoint['action']}"
+            return False
+
+        def operation(endpoint):
+            try:
+                group_name = endpoint.get()['action']
+            except Exception:
+                group_name = "unknown"
+
+            return f"moving group {group_name}"
+
+        operation_name = operation(group_endpoint)
         return cls._retry_operation(operation_name, group_endpoint, move_operation)
 
     @classmethod
@@ -287,15 +306,15 @@ class Proxmox:
             endpoint.put(enable=1, digest=group['digest'])
             return True
 
-        def get_group_name(endpoint):
+        def operation(endpoint):
             try:
-                group = endpoint.get()
-                return group['action']
+                group_name = endpoint.get()['action']
             except Exception:
-                return endpoint['action'] if 'action' in endpoint else "unknown"
+                group_name = "unknown"
 
-        group_name = get_group_name(group_endpoint)
-        operation_name = f"enabling group {group_name}"
+            return f"enabling group {group_name}"
+
+        operation_name = operation(group_endpoint)
         return cls._retry_operation(operation_name, group_endpoint, enable_operation)
 
     @classmethod
@@ -396,9 +415,11 @@ class Proxmox:
                     break
 
             if not found:
+                logger.info(f"Rule '{propagation_rule['name']}': group '{group_to_propagate}' not found in VM/CT {va['name']}")
 
                 # add group to the top of the list
                 if cls.add_new_group(enforced_rules, group_to_propagate):
+                    logger.info(f"Rule '{propagation_rule['name']}': group '{group_to_propagate}' added to VM/CT {va['name']}")
                     propagation_action_count += 1
 
                 if not propagation_rule['force_top']:
@@ -427,44 +448,44 @@ class Proxmox:
         """
 
         enforced_rules_count = 0
-        try:
+        # try:
 
-            for node in cls.pve.nodes.get():
-                node_name = node["node"]
+        for node in cls.pve.nodes.get():
+            node_name = node["node"]
 
-                if 'exclude' in cls._config and 'node_names' in cls._config['exclude']:
-                    if node_name in cls._config['exclude']['node_names']:
-                        logger.info(f"Node {node_name}: excluding")
+            if 'exclude' in cls._config and 'node_names' in cls._config['exclude']:
+                if node_name in cls._config['exclude']['node_names']:
+                    logger.info(f"Node {node_name}: excluding")
+                    continue
+
+            pve = cls.pve.nodes(node_name)
+
+            # VMs and CTs are virtual appliances.
+            # using VAs to refer to them
+            all_vas = pve.qemu.get()
+            all_vas.extend(pve.lxc.get())
+            logger.info(f"Node {node_name}: found {len(all_vas)} VMs/CTs")
+
+            for va in all_vas:
+                if 'exclude' in cls._config and 'va_ids' in cls._config['exclude']:
+                    if node_name in cls._config['exclude']['va_ids']:
+                        logger.info(f"VM/CT {va['name']}: excluding")
                         continue
 
-                pve = cls.pve.nodes(node_name)
+                # select a suitable rule for this VM/CT
+                rule = cls.rule_selector(va)
+                if rule is None:
+                    logger.debug(f"VM/CT {va['name']}: no rule selected")
+                    continue
 
-                # VMs and CTs are virtual appliances.
-                # using VAs to refer to them
-                all_vas = pve.qemu.get()
-                all_vas.extend(pve.lxc.get())
-                logger.info(f"Node {node_name}: found {len(all_vas)} VMs/CTs")
+                logger.info(f"VM/CT {va['name']}: selected rule => {rule['name']}")
 
-                for va in all_vas:
-                    if 'exclude' in cls._config and 'va_ids' in cls._config['exclude']:
-                        if node_name in cls._config['exclude']['va_ids']:
-                            logger.info(f"VM/CT {va['name']}: excluding")
-                            continue
+                propagated = cls.rule_propagator(pve, va, rule)
+                if propagated:
+                    enforced_rules_count += 1
 
-                    # select a suitable rule for this VM/CT
-                    rule = cls.rule_selector(va)
-                    if rule is None:
-                        logger.debug(f"VM/CT {va['name']}: no rule selected")
-                        continue
-
-                    logger.info(f"VM/CT {va['name']}: selected rule => {rule['name']}")
-
-                    propagated = cls.rule_propagator(pve, va, rule)
-                    if propagated:
-                        enforced_rules_count += 1
-
-        except Exception as e:
-            logger.error(f"Error retrieving VMs and containers: {e}")
+        # except Exception as e:
+        #     logger.error(f"Error retrieving VMs and containers: {e}")
 
         return enforced_rules_count
 
